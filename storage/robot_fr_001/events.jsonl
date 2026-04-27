@@ -1,0 +1,2 @@
+{"timestamp": "20260417T193947Z", "event_type": "array_saved", "payload": {"id": "vision_frame_20260417T193947Z_f713035c", "timestamp": "20260417T193947Z", "path": "storage/robot_fr_001/arrays/vision_frame_20260417T193947Z_f713035c.npy", "shape": [480, 640], "dtype": "uint8", "metadata": {"safety_distance": 0.5, "mean_pixel_value": 127.51436197916667}}}
+{"timestamp": "20260417T193947Z", "event_type": "robot_command_generated", "payload": {"command": {"direction": "arrete", "speed": 0.0, "duration": 0.0}, "frame_id": "vision_frame_20260417T193947Z_f713035c"}}

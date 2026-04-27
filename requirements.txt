@@ -1,0 +1,4 @@
+rawpy>=0.17.0
+pillow>=9.0.0
+numpy>=1.21.0
+pytest>=7.0.0
