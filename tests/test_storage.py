@@ -52,6 +52,40 @@ class TestRuntimeStorage(unittest.TestCase):
             self.assertEqual(saved_state["direction"], "arrete")
             self.assertEqual(storage.load_events(limit=1)[0]["event_type"], "robot_command_generated")
 
+    def test_controller_advances_when_path_is_clear(self):
+        """Controller should move forward when no obstacle is visible."""
+        with tempfile.TemporaryDirectory() as temp_dir:
+            storage = RuntimeStorage(base_dir=temp_dir, robot_id="robot_delta")
+            controller = RobotVisionController(storage=storage)
+            image = np.zeros((8, 8), dtype=np.uint8)
+
+            command = controller.process_frame(image)
+
+        self.assertEqual(command.direction, "avance")
+        self.assertGreater(command.speed, 0.0)
+
+    def test_controller_stops_for_center_corridor_obstacle(self):
+        """Controller should stop for obstacles in the forward corridor."""
+        controller = RobotVisionController()
+        image = np.zeros((8, 8), dtype=np.uint8)
+        image[4:, 3:5] = 255
+
+        command = controller.process_frame(image)
+
+        self.assertEqual(command.direction, "arrete")
+        self.assertEqual(command.speed, 0.0)
+
+    def test_controller_steers_toward_visible_target(self):
+        """Controller should steer toward off-center foreground targets."""
+        controller = RobotVisionController()
+        image = np.zeros((8, 8), dtype=np.uint8)
+        image[1:3, 0:2] = 255
+
+        command = controller.process_frame(image)
+
+        self.assertEqual(command.direction, "gauche")
+        self.assertGreater(command.speed, 0.0)
+
     def test_controller_speaks_french(self):
         """Robot controller should expose French status messages."""
         controller = RobotVisionController()

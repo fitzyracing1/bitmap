@@ -4,7 +4,9 @@ from typing import Tuple, Optional
 import numpy as np
 from dataclasses import asdict, dataclass
 
+from src.image_processing import _to_grayscale
 from src.storage import RuntimeStorage
+from src.vision_algorithms import calculate_centroid
 
 
 @dataclass
@@ -55,13 +57,11 @@ class RobotVisionController:
         Returns:
             Robot command based on vision analysis
         """
-        # Analyze image and generate appropriate command
-        # This is a placeholder - implement your logic here
-        command = RobotCommand(
-            direction='arrete',
-            speed=0.0,
-            duration=0.0
-        )
+        obstacle_detected = self.detect_obstacles(image)
+        if obstacle_detected:
+            command = RobotCommand(direction="arrete", speed=0.0, duration=0.5)
+        else:
+            command = self._command_for_clear_path(image)
         
         self.last_command = command
 
@@ -72,6 +72,7 @@ class RobotVisionController:
                 metadata={
                     "safety_distance": self.safety_distance,
                     "mean_pixel_value": float(np.mean(image)),
+                    "obstacle_detected": obstacle_detected,
                 },
             )
             self.storage.save_state("last_command", asdict(command))
@@ -102,8 +103,19 @@ class RobotVisionController:
         Returns:
             True if obstacles detected, False otherwise
         """
-        # Implement obstacle detection logic
-        return False
+        mask = self._foreground_mask(image)
+        if not np.any(mask):
+            return False
+
+        height, width = mask.shape
+        y_start = height // 2
+        corridor_half_width = max(1, int(width * min(max(self.safety_distance, 0.1), 1.0) / 4))
+        center_x = width // 2
+        x_start = max(0, center_x - corridor_half_width)
+        x_end = min(width, center_x + corridor_half_width + 1)
+        corridor = mask[y_start:, x_start:x_end]
+
+        return bool(corridor.size > 0 and np.mean(corridor) >= 0.1)
     
     def calculate_steering(self, target_position: Tuple[int, int], 
                           current_position: Tuple[int, int]) -> float:
@@ -121,3 +133,35 @@ class RobotVisionController:
         
         angle = np.arctan2(dy, dx)
         return float(angle)
+
+    def _command_for_clear_path(self, image: np.ndarray) -> RobotCommand:
+        mask = self._foreground_mask(image)
+        if not np.any(mask):
+            return RobotCommand(direction="avance", speed=0.6, duration=0.5)
+
+        centroid_x, _ = calculate_centroid(mask)
+        width = mask.shape[1]
+        center_x = (width - 1) / 2.0
+        if center_x == 0:
+            return RobotCommand(direction="avance", speed=0.4, duration=0.5)
+
+        offset = (centroid_x - center_x) / center_x
+        if offset < -0.2:
+            return RobotCommand(direction="gauche", speed=0.35, duration=0.4)
+        if offset > 0.2:
+            return RobotCommand(direction="droite", speed=0.35, duration=0.4)
+        return RobotCommand(direction="avance", speed=0.6, duration=0.5)
+
+    def _foreground_mask(self, image: np.ndarray) -> np.ndarray:
+        grayscale = _to_grayscale(image).astype(np.float32)
+        if grayscale.size == 0:
+            return np.zeros_like(grayscale, dtype=bool)
+
+        max_value = float(np.max(grayscale))
+        if max_value <= 0.0:
+            return np.zeros(grayscale.shape, dtype=bool)
+        if max_value <= 1.0:
+            return grayscale > 0.0
+
+        threshold = 127.0 if max_value > 127.0 else float(np.mean(grayscale))
+        return grayscale > threshold
